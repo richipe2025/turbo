@@ -1,0 +1,636 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estadísticas de Salud</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Chart.js para gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary-color: #4e73df;
+            --success-color: #1cc88a;
+            --info-color: #36b9cc;
+            --warning-color: #f6c23e;
+            --danger-color: #e74a3b;
+            --secondary-color: #858796;
+            --light-color: #f8f9fc;
+        }
+        
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: #f8f9fc;
+        }
+        
+        .sidebar {
+            background: linear-gradient(180deg, var(--primary-color) 10%, #224abe 100%);
+            min-height: 100vh;
+        }
+        
+        .stats-chart {
+            height: 300px;
+            width: 100%;
+        }
+        
+        .prediction-card {
+            transition: transform 0.3s;
+        }
+        
+        .prediction-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .nav-link {
+            color: rgba(255, 255, 255, 0.8);
+        }
+        
+        .nav-link:hover {
+            color: white;
+        }
+        
+        .nav-link.active {
+            color: white;
+            font-weight: bold;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 100%;
+            width: 100%;
+        }
+        
+        .badge-trend {
+            font-size: 0.85rem;
+            padding: 0.35em 0.65em;
+        }
+        
+        #loading-spinner {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: none;
+        }
+        
+        .prediction-info {
+            font-size: 0.8rem;
+            color: #6c757d;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3 col-lg-2 d-md-block sidebar bg-primary py-3 px-0 collapse show">
+                <div class="position-sticky pt-3">
+                    <div class="text-center mb-4">
+                        <h4 class="text-white">HealthMonitor</h4>
+                    </div>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="/">
+                                <i class="fas fa-fw fa-user"></i>
+                                Monitor en Vivo
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link active" href="/stats">
+                                <i class="fas fa-fw fa-chart-line"></i>
+                                Estadísticas
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#">
+                                <i class="fas fa-fw fa-history"></i>
+                                Histórico Completo
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 py-4">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">Estadísticas y Predicciones</h1>
+                    <div class="btn-toolbar mb-2 mb-md-0">
+                        <div class="btn-group me-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary active range-btn" data-range="7">7 días</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary range-btn" data-range="30">30 días</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary range-btn" data-range="90">90 días</button>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="export-btn">
+                            <i class="fas fa-download"></i> Exportar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Gráficos de Comparación -->
+                <div class="row">
+                    <!-- Gráfico de Temperatura -->
+                    <div class="col-lg-4 mb-4">
+                        <div class="card shadow prediction-card">
+                            <div class="card-header bg-info text-white">
+                                <h6 class="m-0 font-weight-bold"><i class="fas fa-thermometer-half me-2"></i>Temperatura (Real vs Predicción LSTM)</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="tempChart"></canvas>
+                                </div>
+                                <div class="mt-3">
+                                    <p class="mb-1"><small class="text-muted">Valor actual:</small> <span id="currentTemp">-- °C</span></p>
+                                    <p class="mb-1"><small class="text-muted">Tendencia:</small> <span id="tempTrend" class="badge badge-trend bg-info">Cargando...</span></p>
+                                    <p class="mb-1"><small class="text-muted">Próximas predicciones (LSTM):</small> <span id="tempPrediction">--</span></p>
+                                    <p class="mb-0 prediction-info" id="tempPredictionInfo"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gráfico de Ritmo Cardíaco -->
+                    <div class="col-lg-4 mb-4">
+                        <div class="card shadow prediction-card">
+                            <div class="card-header bg-danger text-white">
+                                <h6 class="m-0 font-weight-bold"><i class="fas fa-heartbeat me-2"></i>Ritmo Cardíaco</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="heartRateChart"></canvas>
+                                </div>
+                                <div class="mt-3">
+                                    <p class="mb-1"><small class="text-muted">Valor actual:</small> <span id="currentHR">-- bpm</span></p>
+                                    <p class="mb-1"><small class="text-muted">Tendencia:</small> <span id="hrTrend" class="badge badge-trend bg-info">Cargando...</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gráfico de SpO2 -->
+                    <div class="col-lg-4 mb-4">
+                        <div class="card shadow prediction-card">
+                            <div class="card-header bg-success text-white">
+                                <h6 class="m-0 font-weight-bold"><i class="fas fa-lungs me-2"></i>SpO2</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="spo2Chart"></canvas>
+                                </div>
+                                <div class="mt-3">
+                                    <p class="mb-1"><small class="text-muted">Valor actual:</small> <span id="currentSpO2">-- %</span></p>
+                                    <p class="mb-1"><small class="text-muted">Tendencia:</small> <span id="spo2Trend" class="badge badge-trend bg-info">Cargando...</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Información Adicional -->
+                <div class="card shadow mb-4">
+                    <div class="card-header bg-white">
+                        <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-info-circle me-2"></i>Interpretación de los Gráficos</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <h5><i class="fas fa-thermometer-half text-info me-2"></i>Temperatura con LSTM</h5>
+                                <p>La línea azul muestra los valores reales registrados. La línea roja discontinua muestra las predicciones generadas por el modelo LSTM entrenado.</p>
+                                <p class="mb-0"><strong>Predicciones:</strong> Cada 30 minutos, el sistema analiza los últimos 20 valores y predice los próximos 90 minutos.</p>
+                            </div>
+                            <div class="col-md-4">
+                                <h5><i class="fas fa-brain text-purple me-2"></i>Sobre el Modelo LSTM</h5>
+                                <p>El modelo de Red Neuronal Recurrente (LSTM) analiza patrones temporales en los datos históricos para predecir valores futuros.</p>
+                                <p class="mb-0"><strong>Precisión:</strong> El modelo fue entrenado con datos históricos y validado para minimizar el error de predicción.</p>
+                            </div>
+                            <div class="col-md-4">
+                                <h5><i class="fas fa-sync-alt text-warning me-2"></i>Actualizaciones</h5>
+                                <p>Los datos se actualizan cada 30 segundos, pero las predicciones LSTM solo se recalculan cada 30 minutos para optimizar recursos.</p>
+                                <p class="mb-0"><strong>Nota:</strong> Las predicciones son estimaciones basadas en patrones históricos.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loading-spinner" class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Cargando...</span>
+    </div>
+
+    <!-- Bootstrap 5 JS Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script>
+        // Variables globales
+        let tempChart, heartRateChart, spo2Chart;
+        let currentRange = '7'; // 7 días por defecto
+        let updateInterval;
+        let predictionUpdateInterval;
+
+        // Inicialización al cargar la página
+        document.addEventListener('DOMContentLoaded', function() {
+            // Inicializar gráficos
+            initCharts();
+            
+            // Configurar eventos
+            setupEventListeners();
+            
+            // Cargar datos iniciales
+            loadData(currentRange);
+            
+            // Configurar actualizaciones periódicas
+            setupAutoRefresh();
+            
+            // Configurar actualización de predicciones
+            setupPredictionRefresh();
+        });
+
+        // Configurar actualización automática de datos
+        function setupAutoRefresh() {
+            // Limpiar intervalo anterior si existe
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+            
+            // Establecer nuevo intervalo (cada 30 segundos)
+            updateInterval = setInterval(() => {
+                loadData(currentRange, false); // No forzar actualización de predicciones
+            }, 30000);
+        }
+
+        // Configurar actualización de predicciones (cada 30 minutos)
+        function setupPredictionRefresh() {
+            // Limpiar intervalo anterior si existe
+            if (predictionUpdateInterval) {
+                clearInterval(predictionUpdateInterval);
+            }
+            
+            // Establecer nuevo intervalo (cada 30 minutos)
+            predictionUpdateInterval = setInterval(() => {
+                loadData(currentRange, true); // Forzar actualización de predicciones
+            }, 1800000); // 30 minutos = 1800000 ms
+            
+            // Ejecutar una primera verificación pronto
+            setTimeout(() => {
+                checkPredictionFreshness();
+            }, 5000);
+        }
+
+        // Verificar si las predicciones están actualizadas
+        function checkPredictionFreshness() {
+            const now = new Date();
+            const lastUpdate = new Date(document.getElementById('tempPredictionInfo').dataset.lastUpdate || 0);
+            const minutesSinceUpdate = (now - lastUpdate) / (1000 * 60);
+            
+            if (minutesSinceUpdate > 35) { // Más de 35 minutos desde la última actualización
+                loadData(currentRange, true);
+            }
+        }
+
+        // Función para inicializar los gráficos
+        function initCharts() {
+            // Gráfico de Temperatura con LSTM
+            const tempCtx = document.getElementById('tempChart').getContext('2d');
+            tempChart = new Chart(tempCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Datos Reales',
+                            data: [],
+                            borderColor: '#36b9cc',
+                            backgroundColor: 'rgba(54, 185, 204, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            tension: 0.3,
+                            fill: false
+                        },
+                        {
+                            label: 'Predicción LSTM',
+                            data: [],
+                            borderColor: '#ff6384',
+                            backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 3,
+                            tension: 0.3,
+                            fill: false
+                        }
+                    ]
+                },
+                options: getChartOptions('Temperatura (°C)')
+            });
+
+            // Gráfico de Ritmo Cardíaco
+            const hrCtx = document.getElementById('heartRateChart').getContext('2d');
+            heartRateChart = new Chart(hrCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Datos Reales',
+                            data: [],
+                            borderColor: '#4e73df',
+                            backgroundColor: 'rgba(78, 115, 223, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            tension: 0.3,
+                            fill: false
+                        }
+                    ]
+                },
+                options: getChartOptions('Ritmo Cardíaco (bpm)')
+            });
+
+            // Gráfico de SpO2
+            const spo2Ctx = document.getElementById('spo2Chart').getContext('2d');
+            spo2Chart = new Chart(spo2Ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Datos Reales',
+                            data: [],
+                            borderColor: '#1cc88a',
+                            backgroundColor: 'rgba(28, 200, 138, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            tension: 0.3,
+                            fill: false
+                        }
+                    ]
+                },
+                options: getChartOptions('SpO2 (%)', 90, 100)
+            });
+        }
+
+        // Configuración común para los gráficos
+        function getChartOptions(title, min = null, max = null) {
+            const options = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 20
+                        }
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.dataset.label}: ${context.parsed.y.toFixed(context.dataset.label.includes('SpO2') ? 0 : 1)}${context.dataset.label.includes('Temperatura') ? '°C' : context.dataset.label.includes('Ritmo') ? ' bpm' : '%'}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    },
+                    y: {
+                        beginAtZero: false,
+                        title: {
+                            display: true,
+                            text: title
+                        }
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                }
+            };
+
+            if (min !== null && max !== null) {
+                options.scales.y.min = min;
+                options.scales.y.max = max;
+            }
+
+            return options;
+        }
+
+        // Configurar eventos
+        function setupEventListeners() {
+            // Botones de rango de tiempo
+            document.querySelectorAll('.range-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    currentRange = this.getAttribute('data-range');
+                    document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    loadData(currentRange);
+                });
+            });
+
+            // Botón de exportar
+            document.getElementById('export-btn').addEventListener('click', exportData);
+        }
+
+        // Cargar datos del servidor
+        function loadData(range, forcePredictionUpdate = false) {
+            // Mostrar spinner
+            document.getElementById('loading-spinner').style.display = 'block';
+            
+            let url = `/stats_data?range=${range}`;
+            if (forcePredictionUpdate) {
+                url += '&force_update=true';
+            }
+            
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) throw new Error('Error al cargar datos');
+                    return response.json();
+                })
+                .then(data => {
+                    processData(data);
+                    // Ocultar spinner
+                    document.getElementById('loading-spinner').style.display = 'none';
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    // Ocultar spinner incluso en caso de error
+                    document.getElementById('loading-spinner').style.display = 'none';
+                });
+        }
+
+        // Procesar datos recibidos
+        function processData(data) {
+            // Formatear fechas
+            const formattedDates = data.dias.map(dateStr => {
+                const date = new Date(dateStr);
+                return `${date.getDate()}/${date.getMonth() + 1} ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+            });
+
+            // Actualizar gráfico de Temperatura con predicciones LSTM
+            updateLSTMChart(
+                tempChart,
+                formattedDates,
+                data.temperatura,
+                data.predictions || [],
+                'currentTemp',
+                'tempTrend',
+                'tempPrediction',
+                'tempPredictionInfo',
+                '°C',
+                data.last_prediction_update
+            );
+
+            // Actualizar gráfico de Ritmo Cardíaco
+            updateBasicChart(
+                heartRateChart,
+                formattedDates,
+                data.heart_rate,
+                'currentHR',
+                'hrTrend',
+                ' bpm'
+            );
+
+            // Actualizar gráfico de SpO2
+            updateBasicChart(
+                spo2Chart,
+                formattedDates,
+                data.spo2,
+                'currentSpO2',
+                'spo2Trend',
+                '%'
+            );
+        }
+
+        // Actualizar gráfico con predicciones LSTM
+        function updateLSTMChart(chart, labels, realData, lstmPredictions, currentId, trendId, predId, predInfoId, unit, lastUpdate) {
+            if (!realData || realData.length === 0) {
+                console.warn('No hay datos reales para mostrar');
+                return;
+            }
+
+            // Preparar datos para el gráfico
+            const chartRealData = [...realData];
+            const chartPredData = Array(realData.length).fill(null);
+            
+            // Si hay predicciones LSTM, añadirlas al final
+            if (lstmPredictions && lstmPredictions.length > 0) {
+                // Añadir predicciones después del último dato real
+                for (let i = 0; i < lstmPredictions.length; i++) {
+                    chartPredData.push(lstmPredictions[i]);
+                    // Añadir etiquetas para las predicciones
+                    const lastDate = new Date(labels[labels.length - 1]);
+                    const predDate = new Date(lastDate);
+                    predDate.setMinutes(predDate.getMinutes() + 30 * (i + 1));
+                    labels.push(`Pred ${i+1}: ${predDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`);
+                }
+            }
+            
+            // Actualizar gráfico
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = chartRealData;
+            chart.data.datasets[1].data = chartPredData;
+            chart.update();
+            
+            // Actualizar valores actuales
+            document.getElementById(currentId).textContent = `${realData[realData.length - 1].toFixed(unit === '%' ? 0 : 1)}${unit}`;
+            
+            // Calcular y mostrar tendencia
+            updateTrend(realData, trendId);
+            
+            // Mostrar predicciones
+            if (lstmPredictions && lstmPredictions.length > 0) {
+                const nextValues = lstmPredictions.map(v => v.toFixed(unit === '%' ? 0 : 1));
+                document.getElementById(predId).textContent = `${nextValues.join(', ')}${unit}`;
+                
+                // Mostrar última actualización de predicciones
+                const predInfoElement = document.getElementById(predInfoId);
+                if (lastUpdate) {
+                    const updateDate = new Date(lastUpdate);
+                    predInfoElement.textContent = `Última actualización LSTM: ${updateDate.toLocaleString()}`;
+                    predInfoElement.dataset.lastUpdate = updateDate;
+                } else {
+                    predInfoElement.textContent = "Predicciones no disponibles";
+                }
+            }
+        }
+
+        // Actualizar gráfico básico (sin predicciones)
+        function updateBasicChart(chart, labels, realData, currentId, trendId, unit) {
+            if (!realData || realData.length === 0) {
+                console.warn('No hay datos reales para mostrar');
+                return;
+            }
+
+            // Actualizar gráfico
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = realData;
+            chart.update();
+            
+            // Actualizar valores actuales
+            document.getElementById(currentId).textContent = `${realData[realData.length - 1].toFixed(unit === '%' ? 0 : 1)}${unit}`;
+            
+            // Calcular y mostrar tendencia
+            updateTrend(realData, trendId);
+        }
+
+        // Actualizar información de tendencia
+        function updateTrend(data, elementId) {
+            if (data.length < 2) {
+                document.getElementById(elementId).textContent = 'Datos insuficientes';
+                document.getElementById(elementId).className = 'badge badge-trend bg-secondary';
+                return;
+            }
+            
+            // Calcular tendencia (últimos 5 puntos)
+            const lastValues = data.slice(-5);
+            const sumX = lastValues.reduce((sum, _, i) => sum + i, 0);
+            const sumY = lastValues.reduce((sum, val) => sum + val, 0);
+            const sumXY = lastValues.reduce((sum, val, i) => sum + (i * val), 0);
+            const sumXX = lastValues.reduce((sum, _, i) => sum + (i * i), 0);
+            
+            const n = lastValues.length;
+            const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+            
+            // Determinar tendencia
+            let trendText, trendClass;
+            if (Math.abs(slope) < 0.01) {
+                trendText = 'Estable';
+                trendClass = 'badge-trend bg-info';
+            } else if (slope > 0) {
+                trendText = '↑ Aumentando';
+                trendClass = 'badge-trend bg-danger';
+            } else {
+                trendText = '↓ Disminuyendo';
+                trendClass = 'badge-trend bg-warning text-dark';
+            }
+            
+            // Actualizar elemento
+            document.getElementById(elementId).textContent = trendText;
+            document.getElementById(elementId).className = trendClass;
+        }
+
+        // Exportar datos
+        function exportData() {
+            // Implementar lógica de exportación aquí
+            alert('Función de exportación se implementará próximamente');
+        }
+    </script>
+</body>
+</html>

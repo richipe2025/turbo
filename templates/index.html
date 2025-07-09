@@ -1,0 +1,555 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor de Salud</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        .card {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+        .card:hover {
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+        .card-header {
+            font-weight: bold;
+            background-color: #f8f9fa;
+        }
+        .gauge-container {
+            height: 300px;
+            width: 100%;
+        }
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+            min-height: 300px;
+        }
+        .badge-value {
+            font-size: 1rem;
+            padding: 0.5em 0.7em;
+        }
+        .range-btn.active {
+            background-color: #0d6efd;
+            color: white;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+        .status-online {
+            background-color: #28a745;
+        }
+        .status-offline {
+            background-color: #dc3545;
+        }
+        canvas {
+            display: block;
+            width: 100% !important;
+            height: 100% !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-4">
+        <header class="mb-4">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="h3">
+                    <i class="bi bi-heart-pulse"></i> Monitor de Salud en Tiempo Real
+                </h1>
+                <div>
+                    <span class="badge bg-primary">MAX30100 + DS18B20</span>
+                    <span id="connection-status" class="badge bg-secondary">
+                        <span class="status-indicator status-offline"></span>
+                        Desconectado
+                    </span>
+                </div>
+            </div>
+            <hr>
+        </header>
+
+        <div class="row">
+            <!-- Tarjeta de Temperatura -->
+            <div class="col-lg-4 col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-thermometer-half"></i> Temperatura</span>
+                        <span id="current-temp" class="badge bg-info badge-value">-- °C</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="temp-gauge" class="gauge-container"></div>
+                    </div>
+                    <div class="card-footer text-muted small d-flex justify-content-between">
+                        <span>Última actualización: <span id="last-update-temp">--:--:--</span></span>
+                        <span id="temp-status" class="status-indicator status-offline"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tarjeta de Ritmo Cardíaco -->
+            <div class="col-lg-4 col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-heart"></i> Ritmo Cardíaco</span>
+                        <span id="current-heart" class="badge bg-danger badge-value">-- bpm</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="heart-gauge" class="gauge-container"></div>
+                    </div>
+                    <div class="card-footer text-muted small d-flex justify-content-between">
+                        <span>Última actualización: <span id="last-update-heart">--:--:--</span></span>
+                        <span id="heart-status" class="status-indicator status-offline"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tarjeta de SpO2 -->
+            <div class="col-lg-4 col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-droplet"></i> Nivel de SpO2</span>
+                        <span id="current-spo2" class="badge bg-success badge-value">-- %</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="spo2-gauge" class="gauge-container"></div>
+                    </div>
+                    <div class="card-footer text-muted small d-flex justify-content-between">
+                        <span>Última actualización: <span id="last-update-spo2">--:--:--</span></span>
+                        <span id="spo2-status" class="status-indicator status-offline"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <!-- Gráfico de Temperatura -->
+            <div class="col-lg-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-graph-up"></i> Histórico de Temperatura
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="tempChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="btn-group btn-group-sm w-100">
+                            <button class="btn btn-outline-secondary range-btn active" data-range="5min">5 min</button>
+                            <button class="btn btn-outline-secondary range-btn" data-range="15min">15 min</button>
+                            <button class="btn btn-outline-secondary range-btn" data-range="30min">30 min</button>
+                            <button class="btn btn-outline-primary range-btn" data-range="all">Todo</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gráfico de Ritmo Cardíaco -->
+            <div class="col-lg-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-activity"></i> Histórico de Ritmo Cardíaco
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="heartChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="btn-group btn-group-sm w-100">
+                            <button class="btn btn-outline-secondary range-btn active" data-range="5min">5 min</button>
+                            <button class="btn btn-outline-secondary range-btn" data-range="15min">15 min</button>
+                            <button class="btn btn-outline-secondary range-btn" data-range="30min">30 min</button>
+                            <button class="btn btn-outline-primary range-btn" data-range="all">Todo</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gráfico de SpO2 -->
+            <div class="col-lg-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-prescription2"></i> Histórico de SpO2
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="spo2Chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="btn-group btn-group-sm w-100">
+                            <button class="btn btn-outline-secondary range-btn active" data-range="5min">5 min</button>
+                            <button class="btn btn-outline-secondary range-btn" data-range="15min">15 min</button>
+                            <button class="btn btn-outline-secondary range-btn" data-range="30min">30 min</button>
+                            <button class="btn btn-outline-primary range-btn" data-range="all">Todo</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Variables globales
+        let lastDataTimestamp = 0;
+        const dataValidityTimeout = 30000; // 30 segundos
+        let tempChart, heartChart, spo2Chart;
+        
+        // Inicialización de gráficos gauge
+        const tempGauge = echarts.init(document.getElementById('temp-gauge'));
+        const heartGauge = echarts.init(document.getElementById('heart-gauge'));
+        const spo2Gauge = echarts.init(document.getElementById('spo2-gauge'));
+        
+        // Configuración de los gauges
+        function updateGauge(chart, value, title, unit, min, max, colors) {
+            const option = {
+                series: [{
+                    type: 'gauge',
+                    min: min,
+                    max: max,
+                    axisLine: {
+                        lineStyle: {
+                            width: 30,
+                            color: colors
+                        }
+                    },
+                    pointer: {
+                        itemStyle: {
+                            color: 'auto'
+                        }
+                    },
+                    axisTick: {
+                        distance: -30,
+                        length: 8,
+                        lineStyle: {
+                            color: '#fff',
+                            width: 2
+                        }
+                    },
+                    splitLine: {
+                        distance: -30,
+                        length: 30,
+                        lineStyle: {
+                            color: '#fff',
+                            width: 4
+                        }
+                    },
+                    axisLabel: {
+                        color: 'auto',
+                        distance: 40,
+                        fontSize: 14
+                    },
+                    detail: {
+                        valueAnimation: true,
+                        formatter: `{value} ${unit}`,
+                        color: 'auto',
+                        fontSize: 24,
+                        fontWeight: 'bolder'
+                    },
+                    title: {
+                        show: true,
+                        offsetCenter: [0, '80%'],
+                        fontSize: 16
+                    },
+                    data: [{
+                        value: value,
+                        name: title
+                    }]
+                }]
+            };
+            chart.setOption(option);
+        }
+
+        // Función para inicializar gráficos de líneas
+        function initChart(ctx, label, unit, color) {
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: label,
+                        data: [],
+                        borderColor: color,
+                        backgroundColor: color.replace(')', ', 0.1)').replace('rgb', 'rgba'),
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        pointBackgroundColor: color,
+                        tension: 0.1,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${label}: ${context.parsed.y} ${unit}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'category',
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                autoSkip: true,
+                                maxTicksLimit: 10
+                            }
+                        },
+                        y: {
+                            beginAtZero: false,
+                            title: {
+                                display: true,
+                                text: unit
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 1000
+                    }
+                }
+            });
+        }
+
+        // Función para actualizar el estado de conexión
+        function updateConnectionStatus(isConnected) {
+            const statusElement = document.getElementById('connection-status');
+            const indicator = statusElement.querySelector('.status-indicator');
+            
+            if (isConnected) {
+                statusElement.classList.remove('bg-secondary', 'bg-danger');
+                statusElement.classList.add('bg-success');
+                indicator.classList.remove('status-offline');
+                indicator.classList.add('status-online');
+                statusElement.innerHTML = '<span class="status-indicator status-online"></span> Conectado';
+            } else {
+                statusElement.classList.remove('bg-secondary', 'bg-success');
+                statusElement.classList.add('bg-danger');
+                indicator.classList.remove('status-online');
+                indicator.classList.add('status-offline');
+                statusElement.innerHTML = '<span class="status-indicator status-offline"></span> Desconectado';
+            }
+        }
+
+        // Función para actualizar el estado de los sensores
+        function updateSensorStatus(sensorId, isActive) {
+            const element = document.getElementById(`${sensorId}-status`);
+            if (!element) return;
+            
+            if (isActive) {
+                element.classList.remove('status-offline');
+                element.classList.add('status-online');
+            } else {
+                element.classList.remove('status-online');
+                element.classList.add('status-offline');
+            }
+        }
+
+        // Función para verificar la validez de los datos
+        function checkDataFreshness() {
+            const now = Date.now();
+            const isDataFresh = (now - lastDataTimestamp) < dataValidityTimeout;
+            
+            updateConnectionStatus(isDataFresh);
+            
+            // Actualizar estado individual de cada sensor
+            updateSensorStatus('temp', isDataFresh);
+            updateSensorStatus('heart', isDataFresh);
+            updateSensorStatus('spo2', isDataFresh);
+        }
+
+        // Función para actualizar gráficos históricos
+        function updateChartData(data) {
+            try {
+                // Temperatura
+                if (data.historico_temperatura && data.historico_temperatura.length > 0) {
+                    tempChart.data.labels = data.historico_temperatura.map(item => item.x);
+                    tempChart.data.datasets[0].data = data.historico_temperatura.map(item => item.y);
+                    tempChart.update();
+                }
+                
+                // Ritmo Cardíaco
+                if (data.historico_heart && data.historico_heart.length > 0) {
+                    heartChart.data.labels = data.historico_heart.map(item => item.x);
+                    heartChart.data.datasets[0].data = data.historico_heart.map(item => item.y);
+                    heartChart.update();
+                }
+                
+                // SpO2
+                if (data.historico_spo2 && data.historico_spo2.length > 0) {
+                    spo2Chart.data.labels = data.historico_spo2.map(item => item.x);
+                    spo2Chart.data.datasets[0].data = data.historico_spo2.map(item => item.y);
+                    spo2Chart.update();
+                }
+            } catch (error) {
+                console.error('Error al actualizar gráficos:', error);
+            }
+        }
+
+        // Función para actualizar los valores de los gauges
+        function updateGaugeData(data) {
+            const timeString = data.last_update ? new Date(data.last_update).toLocaleTimeString() : '--:--:--';
+            
+            // Temperatura
+            if (data.temperatura_actual !== null && data.temperatura_actual !== undefined) {
+                updateGauge(
+                    tempGauge, 
+                    data.temperatura_actual, 
+                    'Temperatura', 
+                    '°C', 
+                    -10, 
+                    50, 
+                    [[0.3, '#67e0e3'], [0.7, '#37a2da'], [1, '#fd666d']]
+                );
+                document.getElementById('current-temp').textContent = `${data.temperatura_actual.toFixed(1)} °C`;
+                document.getElementById('last-update-temp').textContent = timeString;
+                updateSensorStatus('temp', true);
+            } else {
+                document.getElementById('current-temp').textContent = '-- °C';
+                document.getElementById('last-update-temp').textContent = '--:--:--';
+                updateSensorStatus('temp', false);
+            }
+            
+            // Ritmo Cardíaco
+            if (data.heart_rate !== null && data.heart_rate !== undefined) {
+                updateGauge(
+                    heartGauge, 
+                    data.heart_rate, 
+                    'Ritmo Cardíaco', 
+                    'bpm', 
+                    40, 
+                    180, 
+                    [[0.3, '#67e0e3'], [0.7, '#37a2da'], [1, '#fd666d']]
+                );
+                document.getElementById('current-heart').textContent = `${data.heart_rate} bpm`;
+                document.getElementById('last-update-heart').textContent = timeString;
+                updateSensorStatus('heart', true);
+            } else {
+                document.getElementById('current-heart').textContent = '-- bpm';
+                document.getElementById('last-update-heart').textContent = '--:--:--';
+                updateSensorStatus('heart', false);
+            }
+            
+            // SpO2
+            if (data.spo2 !== null && data.spo2 !== undefined) {
+                updateGauge(
+                    spo2Gauge, 
+                    data.spo2, 
+                    'SpO2', 
+                    '%', 
+                    70, 
+                    100, 
+                    [[0.7, '#fd666d'], [0.9, '#37a2da'], [1, '#67e0e3']]
+                );
+                document.getElementById('current-spo2').textContent = `${data.spo2} %`;
+                document.getElementById('last-update-spo2').textContent = timeString;
+                updateSensorStatus('spo2', true);
+            } else {
+                document.getElementById('current-spo2').textContent = '-- %';
+                document.getElementById('last-update-spo2').textContent = '--:--:--';
+                updateSensorStatus('spo2', false);
+            }
+        }
+
+        // Función para obtener datos del servidor
+        function fetchData(timeRange = '5min') {
+            fetch(`/datos?range=${timeRange}`)
+                .then(response => {
+                    if (!response.ok) throw new Error('Error en la red');
+                    return response.json();
+                })
+                .then(data => {
+                    lastDataTimestamp = Date.now();
+                    
+                    // Actualizar gauges
+                    updateGaugeData(data);
+                    
+                    // Actualizar gráficos históricos
+                    updateChartData(data);
+                    
+                    updateConnectionStatus(true);
+                })
+                .catch(error => {
+                    console.error('Error al obtener datos:', error);
+                    updateConnectionStatus(false);
+                });
+        }
+
+        // Inicialización al cargar la página
+        document.addEventListener('DOMContentLoaded', function() {
+            // Obtener contextos de los canvas
+            const tempCtx = document.getElementById('tempChart').getContext('2d');
+            const heartCtx = document.getElementById('heartChart').getContext('2d');
+            const spo2Ctx = document.getElementById('spo2Chart').getContext('2d');
+            
+            // Inicializar gráficos
+            tempChart = initChart(tempCtx, 'Temperatura', '°C', 'rgba(75, 192, 192, 1)');
+            heartChart = initChart(heartCtx, 'Ritmo Cardíaco', 'bpm', 'rgba(255, 99, 132, 1)');
+            spo2Chart = initChart(spo2Ctx, 'SpO2', '%', 'rgba(54, 162, 235, 1)');
+            
+            // Configurar eventos de botones de rango
+            document.querySelectorAll('.range-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    fetchData(this.getAttribute('data-range'));
+                });
+            });
+            
+            // Cargar datos iniciales
+            fetchData();
+            
+            // Actualizar datos cada 5 segundos
+            setInterval(() => {
+                const activeRange = document.querySelector('.range-btn.active').getAttribute('data-range');
+                fetchData(activeRange);
+            }, 5000);
+            
+            // Verificar frescura de datos cada segundo
+            setInterval(checkDataFreshness, 1000);
+            
+            // Configuración inicial de los gauges
+            updateGauge(tempGauge, 0, 'Temperatura', '°C', -10, 50, [[0.3, '#67e0e3'], [0.7, '#37a2da'], [1, '#fd666d']]);
+            updateGauge(heartGauge, 0, 'Ritmo Cardíaco', 'bpm', 40, 180, [[0.3, '#67e0e3'], [0.7, '#37a2da'], [1, '#fd666d']]);
+            updateGauge(spo2Gauge, 0, 'SpO2', '%', 70, 100, [[0.7, '#fd666d'], [0.9, '#37a2da'], [1, '#67e0e3']]);
+            
+            // Estado inicial de conexión
+            updateConnectionStatus(false);
+        });
+
+        // Redimensionar gauges cuando cambia el tamaño de la ventana
+        window.addEventListener('resize', function() {
+            tempGauge.resize();
+            heartGauge.resize();
+            spo2Gauge.resize();
+            
+            if (tempChart) tempChart.resize();
+            if (heartChart) heartChart.resize();
+            if (spo2Chart) spo2Chart.resize();
+        });
+    </script>
+</body>
+</html>
