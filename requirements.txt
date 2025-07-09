@@ -1,0 +1,7 @@
+
+flask>=2.2.0
+werkzeug>=3.0.0
+bootstrap-flask==2.3.3
+flask-sqlalchemy==3.0.1
+paho-mqtt==1.6.1
+mysql-connector-python==8.0.26
